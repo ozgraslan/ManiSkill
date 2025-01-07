@@ -8,6 +8,7 @@ import numpy as np
 from tqdm import tqdm
 import os.path as osp
 from mani_skill.utils.wrappers.record import RecordEpisode
+from mani_skill.utils.wrappers.obs import ResizeRGBSegObservationWrapper
 from mani_skill.trajectory.merge_trajectory import merge_trajectories
 from mani_skill.examples.motionplanning.panda_robotiq.solutions import solvePickCarrot, solvePickCube
 MP_SOLUTIONS = {
@@ -55,6 +56,7 @@ def _main(args, proc_id: int = 0, start_seed: int = 0) -> str:
 
     if args.num_procs > 1:
         new_traj_name = new_traj_name + "." + str(proc_id)
+    env = ResizeRGBSegObservationWrapper(env, (128, 128))
     env = RecordEpisode(
         env,
         output_dir=osp.join(args.record_dir, env_id, "motionplanning"),
@@ -67,6 +69,8 @@ def _main(args, proc_id: int = 0, start_seed: int = 0) -> str:
     output_h5_path = env._h5_file.filename
     solve = MP_SOLUTIONS[env_id]
     print(f"Motion Planning Running on {env_id}")
+    print(args.only_count_success)
+
     pbar = tqdm(range(args.num_traj), desc=f"proc_id: {proc_id}")
     seed = start_seed
     successes = []

@@ -506,15 +506,15 @@ class BaseBridgeEnv(BaseDigitalTwinEnv):
             self.consecutive_grasp = torch.zeros((b,), dtype=torch.int32)
             self.episode_stats = dict(
                 # all_obj_keep_height=torch.zeros((b,), dtype=torch.bool),
-                moved_correct_obj=torch.zeros((b,), dtype=torch.bool),
-                moved_wrong_obj=torch.zeros((b,), dtype=torch.bool),
+                # moved_correct_obj=torch.zeros((b,), dtype=torch.bool),
+                # moved_wrong_obj=torch.zeros((b,), dtype=torch.bool),
                 # near_tgt_obj=torch.zeros((b,), dtype=torch.bool),
                 is_src_obj_grasped=torch.zeros((b,), dtype=torch.bool),
                 # is_closest_to_tgt=torch.zeros((b,), dtype=torch.bool),
                 consecutive_grasp=torch.zeros((b,), dtype=torch.bool),
             )
 
-    def _settle(self, t: int = 0.5):
+    def _settle(self, t: float = 0.5):
         """run the simulation for some steps to help settle the objects"""
         sim_steps = int(self.sim_freq * t / self.control_freq)
         for _ in range(sim_steps):
@@ -596,12 +596,8 @@ class BaseBridgeEnv(BaseDigitalTwinEnv):
         # self.episode_stats["moved_correct_obj"] = moved_correct_obj
         # self.episode_stats["moved_wrong_obj"] = moved_wrong_obj
         self.episode_stats["src_on_target"] = src_on_target
-        self.episode_stats["is_src_obj_grasped"] = (
-            self.episode_stats["is_src_obj_grasped"] | is_src_obj_grasped
-        )
-        self.episode_stats["consecutive_grasp"] = (
-            self.episode_stats["consecutive_grasp"] | consecutive_grasp
-        )
+        self.episode_stats["is_src_obj_grasped"] = is_src_obj_grasped
+        self.episode_stats["consecutive_grasp"] = consecutive_grasp
 
         return dict(**self.episode_stats, success=success)
 

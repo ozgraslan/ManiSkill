@@ -63,14 +63,14 @@ def solve(env: PutCarrotOnPlateInScene, seed=None, debug=False, vis=False):
     # -------------------------------------------------------------------------- #
     goal_pose = sapien.Pose(plate.pose.sp.p, grasp_pose.q) * sapien.Pose([0, 0, -0.1])
     # res = planner.move_to_pose_with_screw(goal_pose)
-    res = planner.move_to_pose_with_RRTConnect(goal_pose)
+    planner.move_to_pose_with_RRTConnect(goal_pose)
 
     # -------------------------------------------------------------------------- #
     # Lower
     # -------------------------------------------------------------------------- #
     lower_pose = sapien.Pose(plate.pose.sp.p, grasp_pose.q) * sapien.Pose([0, 0, -0.05])
-    res = planner.move_to_pose_with_RRTConnect(lower_pose)
-    planner.open_gripper()
+    planner.move_to_pose_with_RRTConnect(lower_pose)
+    res = planner.open_gripper()
 
     planner.close()
     return res

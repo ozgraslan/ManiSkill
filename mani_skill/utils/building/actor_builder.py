@@ -31,7 +31,7 @@ class ActorBuilder(SAPIENActorBuilder):
 
     def __init__(self):
         super().__init__()
-        self.initial_pose = None
+        self.initial_pose = Pose.create(sapien.Pose())
         self.scene_idxs = None
         self._allow_overlapping_plane_collisions = False
         self._plane_collision_poses = set()
@@ -215,7 +215,7 @@ class ActorBuilder(SAPIENActorBuilder):
         num_actors = len(self.scene_idxs)
 
         if self.initial_pose is None:
-            logger.warn(
+            logger.warning(
                 f"No initial pose set for actor builder of {self.name}, setting to default pose q=[1,0,0,0], p=[0,0,0]. Not setting reasonable initial poses may slow down simulation, see https://github.com/haosulab/ManiSkill/issues/421."
             )
             self.initial_pose = Pose.create(sapien.Pose())
