@@ -3,7 +3,7 @@ import numpy as np
 import torch
 import matplotlib.pyplot as plt
 import torchvision.transforms as T
-from mani_skill.envs.tasks.digital_twins.bridge_dataset_eval import *
+from mani_skill.envs.tasks import PickCubeEnv
 from mani_skill.envs.sapien_env import BaseEnv
 from mani_skill.sensors.camera import camera_observations_to_images
 from mani_skill.trajectory.dataset import ManiSkillTrajectoryDataset
@@ -13,16 +13,18 @@ from einops import rearrange
 
 
 env: gym.Env = gym.make(
-  "PutCarrotOnPlateInSceneSep-v1",
+  "PickCube-v1",
+  robot_uids="panda_robotiq",
   obs_mode="rgb+segmentation",
   render_mode="human",
   num_envs=2, # if num_envs > 1, GPU simulation backend is used.
 )
 
-env = MaskResizeRGBSegObsWrapper(env, new_size=(128, 128))
+# env = MaskResizeRGBSegObsWrapper(env, new_size=(128, 128))
 obs, _ = env.reset()
-rgb = obs["sensor_data"]["3rd_view_camera"]["rgb"]
-seg = obs["sensor_data"]["3rd_view_camera"]["segmentation"]
+print(obs)
+rgb = obs["sensor_data"]["base_camera"]["rgb"]
+seg = obs["sensor_data"]["base_camera"]["segmentation"]
 # zero_img = torch.zeros_like(rgb)
 # mask = torch.ones_like(seg)
 # mask[

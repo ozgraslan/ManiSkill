@@ -65,6 +65,7 @@ def _main(args, proc_id: int = 0, start_seed: int = 0) -> str:
         env,
         output_dir=osp.join(args.record_dir, env_id, "motionplanning"),
         trajectory_name=new_traj_name, save_video=args.save_video,
+        info_on_video=True,
         source_type="motionplanning",
         source_desc="official motion planning solution from ManiSkill contributors",
         video_fps=30,

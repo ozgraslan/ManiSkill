@@ -292,3 +292,32 @@ class Panda(BaseAgent):
     #         entity_uid="panda_hand",
     #     )
     # ]
+
+
+# Tuned for the sink setup
+from mani_skill.sensors.camera import CameraConfig
+@register_agent()
+class PandaBridgeDatasetFlatTable(Panda):
+    uid = "panda_bridgedataset_flat_table"
+
+    @property
+    def _sensor_configs(self):
+        return [
+            CameraConfig(
+                uid="3rd_view_camera",  # the camera used for real evaluation for the sink setup
+                pose=sapien.Pose(
+                    [-0.00300001, -0.21, 0.39], # [-0.00300001, -0.21, 0.39], [0.1, -0.12, 0.39] [0.25, -0.12, 0.36] [0.1470000, -0.21, 0.25]
+                    [0.9331967, -0.1159444, 0.255225, 0.2248576], # [0.9331967, -0.1159444, 0.255225, 0.2248576] [-0.907313, 0.0782, -0.36434, -0.194741] 
+                ),
+                # entity_uid="panda_link0",
+                mount=self.robot.links_map["panda_link0"],
+                width=640,
+                # fov=1.5,
+                height=480,
+                near=0.01,
+                far=10,
+                intrinsic=np.array(
+                    [[623.588, 0, 319.501], [0, 623.588, 239.545], [0, 0, 1]]
+                ),
+            )
+        ]

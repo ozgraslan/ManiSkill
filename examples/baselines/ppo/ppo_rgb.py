@@ -34,9 +34,9 @@ class Args:
     """if toggled, cuda will be enabled by default"""
     track: bool = False
     """if toggled, this experiment will be tracked with Weights and Biases"""
-    wandb_project_name: str = "ManiSkill"
+    wandb_project_name: str = "put_carrot_on_plate"
     """the wandb's project name"""
-    wandb_entity: Optional[str] = None
+    wandb_entity: Optional[str] = "jakd9"
     """the entity (team) of wandb's project"""
     wandb_group: str = "PPO"
     """the group of the run for wandb"""
@@ -68,9 +68,9 @@ class Args:
     """whether to let parallel environments reset upon termination instead of truncation"""
     eval_partial_reset: bool = False
     """whether to let parallel evaluation environments reset upon termination instead of truncation"""
-    num_steps: int = 50
+    num_steps: int = 60
     """the number of steps to run in each environment per policy rollout"""
-    num_eval_steps: int = 50
+    num_eval_steps: int = 60
     """the number of steps to run in each evaluation environment during evaluation"""
     reconfiguration_freq: Optional[int] = None
     """how often to reconfigure the environment during training"""

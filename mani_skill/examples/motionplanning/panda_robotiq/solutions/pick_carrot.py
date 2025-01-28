@@ -1,13 +1,14 @@
 import numpy as np
 import sapien
+import time
 
-from mani_skill.envs.tasks import PutCarrotOnPlateInScene
+from mani_skill.envs.tasks import PutCarrotOnPlateInSceneSep
 from mani_skill.examples.motionplanning.panda_robotiq.motionplanner import \
     PandaRobotiqMotionPlanningSolver
 from mani_skill.examples.motionplanning.panda.utils import (
     compute_grasp_info_by_obb, get_actor_obb)
 
-def solve(env: PutCarrotOnPlateInScene, seed=None, debug=False, vis=False):
+def solve(env: PutCarrotOnPlateInSceneSep, seed=None, debug=False, vis=False):
     env.reset(seed=seed)
     planner = PandaRobotiqMotionPlanningSolver(
         env,
@@ -38,7 +39,6 @@ def solve(env: PutCarrotOnPlateInScene, seed=None, debug=False, vis=False):
     )
     closing, center = grasp_info["closing"], grasp_info["center"]
     grasp_pose = env.agent.build_grasp_pose(approaching, closing, carrot.pose.sp.p)
-
     # -------------------------------------------------------------------------- #
     # Reach Carrot
     # -------------------------------------------------------------------------- #

@@ -16,6 +16,7 @@ from mani_skill.utils.registration import register_env
 )
 class PutCarrotOnPlateInScene(BaseBridgeEnv):
     scene_setting = "flat_table"
+    SUPPORTED_OBS_MODES = ["rgb+segmentation", "state", "state_dict"]
 
     def __init__(self, **kwargs):
         xy_center = np.array([-0.16, 0.00])
@@ -30,6 +31,7 @@ class PutCarrotOnPlateInScene(BaseBridgeEnv):
         xyz_configs = []
         for i, grid_pos_1 in enumerate(grid_pos):
             for j, grid_pos_2 in enumerate(grid_pos):
+                if j > 0: break
                 if i != j:
                     xyz_configs.append(
                         np.array(
@@ -39,7 +41,9 @@ class PutCarrotOnPlateInScene(BaseBridgeEnv):
                             ]
                         )
                     )
+                
         xyz_configs = torch.tensor(np.stack(xyz_configs))
+        print(xyz_configs.shape)
         quat_configs = torch.tensor(
             np.stack(
                 [
@@ -89,35 +93,39 @@ class PutCarrotOnPlateInSceneSep(PutCarrotOnPlateInScene):
         )
         is_robot_static = self.agent.is_static(0.2)
 
+        source_object = self.objs[self.source_obj_name]
+        target_object = self.objs[self.target_obj_name]
+
+        tcp_to_obj_dist = torch.linalg.norm(
+            source_object.pose.p - self.agent.tcp.pose.p, axis=1
+        )
+
+        obj_to_goal_dist = torch.linalg.norm(
+            target_object.pose.p - source_object.pose.p, axis=1
+        )
+
+        info["tcp_to_obj_dist"] = tcp_to_obj_dist
+        info["obj_to_goal_dist"] = obj_to_goal_dist
         info["success"] = info["src_on_target"] & is_robot_static
         info["is_robot_static"] = is_robot_static
         return info
 
     def compute_dense_reward(self, obs, action, info):
-        source_object = self.objs[self.source_obj_name]
-        target_object = self.objs[self.target_obj_name]
-
         # taken from pick cube task
         # widowx does not support agent.tcp 
         # maybe we can add it?
 
-        tcp_to_obj_dist = torch.linalg.norm(
-            source_object.pose.p - self.agent.tcp.pose.p, axis=1
-        )
-        reaching_reward = 1 - torch.tanh(5 * tcp_to_obj_dist)
+        reaching_reward = 1 - torch.tanh(5 * info["tcp_to_obj_dist"])
         reward = reaching_reward
 
         is_grasped = info["is_src_obj_grasped"]
         reward += is_grasped
 
-        obj_to_goal_dist = torch.linalg.norm(
-            target_object.pose.p - source_object.pose.p, axis=1
-        )
-        place_reward = 1 - torch.tanh(5 * obj_to_goal_dist)
+        place_reward = 1 - torch.tanh(5 * info["obj_to_goal_dist"])
         reward += place_reward * is_grasped
 
         static_reward = 1 - torch.tanh(
-            5 * torch.linalg.norm(self.agent.robot.get_qvel()[..., :-2], axis=1)
+            5 * torch.linalg.norm(self.agent.robot.get_qvel()[..., :-6], axis=1)
         )
 
         reward += static_reward * info["src_on_target"]

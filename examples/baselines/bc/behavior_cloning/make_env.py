@@ -41,6 +41,6 @@ def make_eval_envs(env_id, num_envs: int, sim_backend: str, env_kwargs: dict, vi
         for wrapper in wrappers:
             env = wrapper(env)
         if video_dir:
-            env = RecordEpisode(env, output_dir=video_dir, save_trajectory=False, save_video=True, source_type="behavior_cloning", source_desc="behavior_cloning evaluation rollout", max_steps_per_video=max_episode_steps)
+            env = RecordEpisode(env, output_dir=video_dir, save_trajectory=False, save_video=True, info_on_video=True, source_type="behavior_cloning", source_desc="behavior_cloning evaluation rollout", max_steps_per_video=max_episode_steps)
         env = ManiSkillVectorEnv(env, ignore_terminations=True, record_metrics=True)
     return env

@@ -437,10 +437,14 @@ if __name__ == "__main__":
             for _ in range(args.num_eval_steps):
                 with torch.no_grad():
                     eval_obs, eval_rew, eval_terminations, eval_truncations, eval_infos = eval_envs.step(agent.actor_mean(eval_obs))
+                    # print(eval_infos)
                     if "final_info" in eval_infos:
                         mask = eval_infos["_final_info"]
                         num_episodes += mask.sum()
                         for k, v in eval_infos["final_info"]["episode"].items():
+                            eval_metrics[k].append(v)
+                    else:
+                        for k, v in eval_infos["episode"].items():
                             eval_metrics[k].append(v)
             eval_metrics_mean = {}
             for k, v in eval_metrics.items():
@@ -448,6 +452,7 @@ if __name__ == "__main__":
                 eval_metrics_mean[k] = mean
                 if logger is not None:
                     logger.add_scalar(f"eval/{k}", mean, global_step)
+            # if "success" in list(eval_metrics_mean.keys()) and "return" in list(eval_metrics_mean.keys()):
             pbar.set_description(
                 f"success_once: {eval_metrics_mean['success_once']:.2f}, "
                 f"return: {eval_metrics_mean['return']:.2f}"

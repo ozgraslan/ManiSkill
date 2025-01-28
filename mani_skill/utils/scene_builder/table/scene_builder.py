@@ -111,12 +111,21 @@ class TableSceneBuilder(SceneBuilder):
                     0,
                 ]
             )
-            # qpos = (
-            #     self.env._episode_rng.normal(
-            #         0, self.robot_init_qpos_noise, (b, len(qpos))
-            #     )
-            #     + qpos
-            # )
+            if self.env._enhanced_determinism:
+                qpos = (
+                    self.env._batched_episode_rng[env_idx].normal(
+                        0, self.robot_init_qpos_noise, len(qpos)
+                    )
+                    + qpos
+                )
+            else:
+                qpos = (
+                    self.env._episode_rng.normal(
+                        0, self.robot_init_qpos_noise, (b, len(qpos))
+                    )
+                    + qpos
+                )
+            qpos[:, -6:] = 0.00
             self.env.agent.reset(qpos)
             self.env.agent.robot.set_pose(sapien.Pose([-0.615, 0, 0]))
         elif self.env.robot_uids == "panda_wristcam":

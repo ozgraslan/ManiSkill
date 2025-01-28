@@ -60,3 +60,8 @@ class WidowX250S(BaseAgent):
             rforce >= min_force, torch.rad2deg(rangle) <= max_angle
         )
         return torch.logical_and(lflag, rflag)
+
+    def is_static(self, threshold: float = 0.2):
+        ## this should only include robot joint vels not the gripper 
+        qvel = self.robot.get_qvel()[..., :-2]
+        return torch.max(torch.abs(qvel), 1)[0] <= threshold

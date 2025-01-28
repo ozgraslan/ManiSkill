@@ -33,7 +33,7 @@ class PickCubeEnv(BaseEnv):
     """
 
     _sample_video_link = "https://github.com/haosulab/ManiSkill/raw/main/figures/environment_demos/PickCube-v1_rt.mp4"
-    SUPPORTED_ROBOTS = ["panda", "fetch"]
+    SUPPORTED_ROBOTS = ["panda", "fetch", "panda_robotiq"]
     agent: Union[Panda, Fetch]
     cube_half_size = 0.02
     goal_thresh = 0.025

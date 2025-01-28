@@ -36,10 +36,13 @@ class Args:
     """if toggled, cuda will be enabled by default"""
     track: bool = False
     """if toggled, this experiment will be tracked with Weights and Biases"""
-    wandb_project_name: str = "bc_pick_carrot_on_plate"
+    wandb_project_name: str = "put_carrot_on_plate"
     """the wandb's project name"""
     wandb_entity: Optional[str] = "jakd9"
     """the entity (team) of wandb's project"""
+    wandb_group: str = "BC"
+    """the group of the run for wandb"""
+
     capture_video: bool = True
     """whether to capture videos of the agent performances (check out `videos` folder)"""
 
@@ -55,6 +58,8 @@ class Args:
     """the batch size of sample from the replay memory"""
 
     # Behavior cloning specific arguments
+    normalize: bool = False
+    """if toggled, states are normalized to mean 0 and standard deviation 1"""
     lr: float = 3e-4
     """the learning rate for the actor"""
 
@@ -137,7 +142,7 @@ def flatten_state_dict_with_space(state_dict: dict) -> np.ndarray:
 
 
 class ManiSkillDataset(Dataset):
-    def __init__(self, dataset_file: str, device: torch.device, load_count, mask_background, not_masked_ids) -> None:
+    def __init__(self, dataset_file: str, device: torch.device, load_count, mask_background, not_masked_ids, normalize=False) -> None:
         self.dataset_file = dataset_file
         # for details on how the code below works, see the
         # quick start tutorial
@@ -150,6 +155,7 @@ class ManiSkillDataset(Dataset):
         self.env_id = self.env_info["env_id"]
         self.env_kwargs = self.env_info["env_kwargs"]
         self.mask_background = mask_background
+        self.normalize = normalize
 
         self.rgb = []
         self.mask = []
@@ -180,15 +186,26 @@ class ManiSkillDataset(Dataset):
 
             # we use :-1 here to ignore the last observation as that
             # is the terminal observation which has no actions
-            rgb_images = trajectory["obs"]["sensor_data"]["3rd_view_camera"]["rgb"][:-1] / 255.0
-            rgb_images = rgb_images * 2 - 1
-            rgb_images = np.float32(rgb_images)
+            rgb_images = trajectory["obs"]["sensor_data"]["3rd_view_camera"]["rgb"][:-1]
+            print(rgb_images.dtype)
+            # rgb_images = np.float32(rgb_images)
             self.rgb.append(rgb_images)
+            # delta_actions = []
+            # last_action = trajectory["actions"][0]
+            # for action in trajectory["actions"][1:]:
+            #     delta_actions.append(action - last_action)
+            #     last_action = action
+            # # print(last_action.shape)
+            # # exit(0)
+            # delta_actions = np.vstack(delta_actions)
+            # self.actions.append(delta_actions)
             self.actions.append(trajectory["actions"])
+            # import pdb; pdb.set_trace()
+            # print()
 
             # print(rgb_images.dtype)
             if self.mask_background:
-                segment_images = np.int8(trajectory["obs"]["sensor_data"]["3rd_view_camera"]["segmentation"][:-1])
+                segment_images = np.uint8(trajectory["obs"]["sensor_data"]["3rd_view_camera"]["segmentation"][:-1])
                 mask = np.ones_like(segment_images)
                 mask[
                     np.isin(
@@ -204,13 +221,6 @@ class ManiSkillDataset(Dataset):
             self.mask = np.vstack(self.mask)
         # self.states = np.vstack(self.states)
         self.actions = np.vstack(self.actions)
-        
-        self.rgb_mean = np.mean(self.rgb, axis=(0,1,2), dtype=np.float32)
-        self.rgb_std = np.std(self.rgb, axis=(0,1,2), dtype=np.float32)
-
-        print(self.rgb_mean.shape, self.rgb_std.shape)
-
-
         self.actions_mean = np.mean(self.actions, axis=0, dtype=np.float32)
         self.actions_std = (np.std(self.actions, axis=0, dtype=np.float32) + 0.001) 
 
@@ -220,42 +230,30 @@ class ManiSkillDataset(Dataset):
 
         assert self.rgb.shape[0] == self.actions.shape[0]
 
-        torch.save({"rgb_mean": self.rgb_mean, "rgb_std": self.rgb_std, 
-                    "actions_mean": self.actions_mean, "actions_std": self.actions_std,
-                    # "states_mean": self.states_mean, "states_std": self.states_std 
-                    },
-                    f"runs/{run_name}/dataset.pt",                   
-        )
-       
-
     def __len__(self):
         return len(self.rgb)
 
     def __getitem__(self, idx):
         out = {}
-        out["action"] = (
-            torch.from_numpy((self.actions[idx] - self.actions_mean) / self.actions_std).float().to(device=self.device)
-        )
+        actions = torch.from_numpy(self.actions[idx])
         rgb = torch.from_numpy(self.rgb[idx])
-        # rgb = ((rgb - self.rgb_mean) / self.rgb_std)
+        # state = torch.from_numpy(self.states[idx])
+
+        if self.normalize:
+            actions = (actions - self.actions_mean) / self.actions_std
+            rgb = rgb / 255.0
+            rgb = 2 * rgb - 1
+            # state = (state - self.states_mean) / self.states_std
 
         if self.mask_background:
             mask = torch.from_numpy(self.mask[idx])
             zero_img = torch.zeros_like(rgb, dtype=rgb.dtype)
             rgb = rgb * (1 - mask) + zero_img * mask
 
-        rgb = rgb.float().to(device=self.device)
-        out["rgb"] = rgb
-        # print(rgb.shape)
-        # import matplotlib.pyplot as plt
-
-        # plt.imshow(rgb.cpu().numpy())
-        # plt.show()
-
-        # exit(0)
-
-        # out["state"] = torch.from_numpy((self.states[idx] - self.states_mean ) / self.states_std).float().to(device=self.device)
-        # print(out["rgb"].shape, out["action"].shape, out["state"].shape)
+        out["rgb"] = rgb.float().to(device=self.device)
+        out["action"] = actions.float().to(device=self.device)
+    
+        # out["state"] = state.float().to(device=self.device)
 
         return out
 
@@ -407,7 +405,7 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
     env: gym.Env = gym.make(
-    "PutCarrotOnPlateInSceneSep-v1",
+    args.env_id,
     obs_mode="rgb+segmentation",
     reward_mode="dense",
     control_mode=args.control_mode,
@@ -420,7 +418,6 @@ if __name__ == "__main__":
     not_maked_ids = torch.cat([env.robot_link_ids, env.target_object_actor_ids, 
                                torch.tensor([env.scene.actors["sep_flat_table"]._objs[0].per_scene_id], device=env.device)])
 
-    writer = SummaryWriter(f"runs/{run_name}")
     print("Backgroud masking:", args.mask_background)
     ds = ManiSkillDataset(
         args.demo_path,
@@ -428,30 +425,30 @@ if __name__ == "__main__":
         load_count=args.num_demos,
         mask_background=args.mask_background,
         not_masked_ids=not_maked_ids,
+        normalize=args.normalize,
     )
     # exit(0)
+    # import pdb; pdb.set_trace()
+    # tr_ds, te_ds = torch.utils.data.random_split(ds, [0.99, 0.01])
+
 
     sampler = RandomSampler(ds)
     batch_sampler = BatchSampler(sampler, args.batch_size, drop_last=True)
     iter_sampler = IterationBasedBatchSampler(batch_sampler, args.total_iters)
 
     data_loader = DataLoader(ds, batch_sampler=iter_sampler, num_workers=0)
+    # test_loader = DataLoader(ds, batch_size=1)
     actor = Actor(action_dim=ds.actions.shape[1]).to( # ds.states.shape[1], 
         device=device
     )
 
     optimizer = optim.AdamW(actor.parameters(), lr=args.lr)
 
-    writer.add_text(
-        "hyperparameters",
-        "|param|value|\n|-|-|\n%s"
-        % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
-    )
-
     if args.track:
         import wandb
 
         config = vars(args)
+
         wandb.init(
             project=args.wandb_project_name,
             entity=args.wandb_entity,
@@ -459,10 +456,24 @@ if __name__ == "__main__":
             config=config,
             name=run_name,
             save_code=True,
-            group="BehaviorCloning",
+            group=args.wandb_group,
             tags=["behavior_cloning"],
         )
-        
+
+    writer = SummaryWriter(f"runs/{run_name}")
+    writer.add_text(
+        "hyperparameters",
+        "|param|value|\n|-|-|\n%s"
+        % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
+    )
+    torch.save({
+                # "rgb_mean": ds.rgb_mean, "rgb_std": ds.rgb_std, 
+                "actions_mean": ds.actions_mean, "actions_std": ds.actions_std,
+                # "states_mean": self.states_mean, "states_std": self.states_std 
+                },
+                f"runs/{run_name}/dataset.pt",                   
+    )
+
     for iteration, batch in enumerate(data_loader):
         log_dict = {}
 
@@ -473,11 +484,21 @@ if __name__ == "__main__":
         optimizer.step()
 
         if (iteration+1) % args.log_freq == 0:
-            print(f"Iteration {iteration}, loss: {loss.item()}")
+            # test_loss_list = []
+            # with torch.no_grad():
+            #     actor.eval()
+            #     for test_batch in test_loader:
+            #         test_pred = actor(test_batch["rgb"])
+            #         test_loss = F.mse_loss(test_pred, test_batch["action"])
+            #         test_loss_list.append(test_loss.item())
+            #     mean_test_loss = torch.stack(test_loss_list).mean()
+
+            print(f"Iteration {iteration}, loss: {loss.item()}") # , mean test loss: {mean_test_loss}
             writer.add_scalar(
                 "charts/learning_rate", optimizer.param_groups[0]["lr"], iteration
             )
-            writer.add_scalar("losses/total_loss", loss.item(), iteration)
+            writer.add_scalar("charts/train_loss", loss.item(), iteration)
+            # writer.add_scalar("charts/mean_test_loss", loss.item(), iteration)
 
         if args.save_freq is not None and (iteration+1) % args.save_freq == 0:
             save_ckpt(run_name, str(iteration))

@@ -47,12 +47,13 @@ class Args:
     """the id of the environment"""
     demo_path: str = "data/ms2_official_demos/rigid_body/PegInsertionSide-v0/trajectory.state.pd_ee_delta_pose.h5"
     """the path of demo dataset (pkl or h5)"""
-
     # Behavior cloning specific arguments
-    normalize_states: bool = False
+    normalize: bool = False
     """if toggled, states are normalized to mean 0 and standard deviation 1"""
     lr: float = 3e-4
     """the learning rate for the actor"""
+    new_size: int = 128
+    """size for resizing the rgb/depth/segmentation observations"""
 
     # Environment/experiment specific arguments
     max_episode_steps: Optional[int] = None
@@ -68,7 +69,7 @@ class Args:
     """the control mode to use for the evaluation environments. Must match the control mode of the demonstration dataset."""
 
     mask_background: bool = False
-
+    checkpoint: int = 9999
 
 def load_h5_data(data):
     out = dict()
@@ -244,21 +245,21 @@ if __name__ == "__main__":
     else:
         run_name = args.exp_name
 
-    if args.demo_path.endswith(".h5"):
-        import json
+    # if args.demo_path.endswith(".h5"):
+    #     import json
 
-        json_file = args.demo_path[:-2] + "json"
-        with open(json_file, "r") as f:
-            demo_info = json.load(f)
-            if "control_mode" in demo_info["env_info"]["env_kwargs"]:
-                control_mode = demo_info["env_info"]["env_kwargs"]["control_mode"]
-            elif "control_mode" in demo_info["episodes"][0]:
-                control_mode = demo_info["episodes"][0]["control_mode"]
-            else:
-                raise Exception("Control mode not found in json")
-            assert (
-                control_mode == args.control_mode
-            ), f"Control mode mismatched. Dataset has control mode {control_mode}, but args has control mode {args.control_mode}"
+    #     json_file = args.demo_path[:-2] + "json"
+    #     with open(json_file, "r") as f:
+    #         demo_info = json.load(f)
+    #         if "control_mode" in demo_info["env_info"]["env_kwargs"]:
+    #             control_mode = demo_info["env_info"]["env_kwargs"]["control_mode"]
+    #         elif "control_mode" in demo_info["episodes"][0]:
+    #             control_mode = demo_info["episodes"][0]["control_mode"]
+    #         else:
+    #             raise Exception("Control mode not found in json")
+    #         assert (
+    #             control_mode == args.control_mode
+    #         ), f"Control mode mismatched. Dataset has control mode {control_mode}, but args has control mode {args.control_mode}"
 
     np.random.seed(args.seed)
     random.seed(args.seed)
@@ -278,20 +279,17 @@ if __name__ == "__main__":
         env_kwargs["max_episode_steps"] = args.max_episode_steps
 
 
-    def helper(wrpr, new_size, mean, std):
-        def test(env):
-            return wrpr(env, new_size=new_size, mean=mean, std=std)
-        return test
+    def func(wrpr, new_size, normalize):
+        def apply(env):
+            return wrpr(env, new_size=new_size, normalize=normalize)
+        return apply
 
 
     ds = torch.load(f"runs/{run_name}/dataset.pt")
     print(ds["actions_mean"].shape) # ds["states_mean"].shape,
 
-    rgb_mean = torch.from_numpy(ds["rgb_mean"]).float()
-    rgb_std = torch.from_numpy(ds["rgb_std"]).float()
-
     wrapper = MaskResizeRGBSegObsWrapper if args.mask_background else ResizeRGBSegObservationWrapper
-    wrapper = helper(wrapper, new_size=(128, 128), mean=rgb_mean, std=rgb_std)
+    wrapper = func(wrapper, new_size=(args.new_size, args.new_size), normalize=args.normalize)
     envs = make_eval_envs(
         args.env_id,
         args.num_eval_envs,
@@ -306,7 +304,7 @@ if __name__ == "__main__":
         device=device
     )
     # actor = torch.compile(actor)
-    load_ckpt(run_name=run_name, tag=199999)
+    load_ckpt(run_name=run_name, tag=args.checkpoint)
 
     # state_mean = torch.from_numpy(ds["states_mean"]).float().to(device)
     # state_std = torch.from_numpy(ds["states_std"]).float().to(device)
@@ -319,24 +317,8 @@ if __name__ == "__main__":
 
     def sample_fn(obs):
         rgb = obs["sensor_data"]["3rd_view_camera"]["rgb"]
-        # agent = obs["agent"]
-        # extra = obs["extra"]
-
         if isinstance(rgb, np.ndarray):
             rgb = torch.from_numpy(rgb).float().to(device)
-            # agent = torch.from_numpy(agent).float().to(device)
-            # extra = torch.from_numpy(extra).float().to(device)
-
-        # rgb_t = torch.div(rgb, norm_tensor)
-
-        # state = torch.hstack(
-        #     [
-        #         flatten_state_dict_with_space(agent),
-        #         flatten_state_dict_with_space(extra),
-        #     ]
-        # )
-        # rgb_norm = (rgb_t - rgb_mean) / rgb_std
-        # state_norm = (state - state_mean) / state_std
         action_norm = actor(rgb) # , state_norm
         action_denorm = action_norm * action_std + action_mean
         if args.sim_backend == "cpu":

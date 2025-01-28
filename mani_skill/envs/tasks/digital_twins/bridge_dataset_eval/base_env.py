@@ -17,7 +17,7 @@ from mani_skill.agents.controllers.pd_joint_pos import PDJointPosMimicController
 from mani_skill.agents.registration import register_agent
 from mani_skill.agents.robots.widowx.widowx import WidowX250S
 from mani_skill.agents.robots.panda_robotiq_2f_85.panda_robotiq_2f_85 import (
-    PandaRobotiqridgeDatasetFlatTable,
+    PandaRobotiqBridgeDatasetFlatTable,
 )
 from mani_skill.envs.tasks.digital_twins.base_env import BaseDigitalTwinEnv
 from mani_skill.sensors.camera import CameraConfig
@@ -174,20 +174,21 @@ class BaseBridgeEnv(BaseDigitalTwinEnv):
         obj_names: List[str],
         xyz_configs: torch.Tensor,
         quat_configs: torch.Tensor,
-        robot: str = "panda_robotiq",
+        robot_uids="panda_robotiq",
         **kwargs,
     ):
         self.objs: Dict[str, Actor] = dict()
         self.obj_names = obj_names
-        self.robot = robot
         self.source_obj_name = obj_names[0]
         self.target_obj_name = obj_names[1]
         self.xyz_configs = xyz_configs
         self.quat_configs = quat_configs
 
-        if self.robot == "widowx250s":
+        if robot_uids== "widowx250s":
             self.base_link = "base_link"
-        elif self.robot == "panda_robotiq":
+        elif robot_uids == "panda_robotiq":
+            self.base_link = "panda_link0"
+        elif robot_uids == "panda":
             self.base_link = "panda_link0"
         else:
             raise NotImplementedError()
@@ -198,12 +199,13 @@ class BaseBridgeEnv(BaseDigitalTwinEnv):
                     BRIDGE_DATASET_ASSET_PATH / "real_inpainting/bridge_real_eval_1.png"
                 )
             }
-            if self.robot == "widowx250s":
-                robot_cls = WidowX250SBridgeDatasetFlatTable
-            elif self.robot == "panda_robotiq":
-                robot_cls = PandaRobotiqridgeDatasetFlatTable
-            else:
-                raise NotImplementedError()
+            # if robot_uids == "widowx250s":
+            #     robot_cls = WidowX250SBridgeDatasetFlatTable
+            # elif robot_uids == "panda_robotiq":
+            #     robot_cls = PandaRobotiqBridgeDatasetFlatTable
+            # else:
+            #     raise NotImplementedError()
+            robot_uids = robot_uids + "_bridgedataset_flat_table"
 
         elif self.scene_setting == "sink":
             self.rgb_overlay_paths = {
@@ -211,13 +213,15 @@ class BaseBridgeEnv(BaseDigitalTwinEnv):
                     BRIDGE_DATASET_ASSET_PATH / "real_inpainting/bridge_sink.png"
                 )
             }
-            robot_cls = WidowX250SBridgeDatasetSink
-
+            # robot_cls = WidowX250SBridgeDatasetSink
+            robot_uids = robot_uids + "_bridgedataset_sink"
         self.model_db: Dict[str, Dict] = io_utils.load_json(
             BRIDGE_DATASET_ASSET_PATH / "custom/" / self.MODEL_JSON
         )
+        # robot_uids = robot_cls
+        print(robot_uids)
         super().__init__(
-            robot_uids=robot_cls,
+            robot_uids=robot_uids,
             **kwargs,
         )
 
@@ -394,8 +398,9 @@ class BaseBridgeEnv(BaseDigitalTwinEnv):
                 quat_episode_ids = torch.randint(0, len(self.quat_configs), size=(b,))
             for i, actor in enumerate(self.objs.values()):
                 xyz = self.xyz_configs[pos_episode_ids, i]
+                quat = self.quat_configs[quat_episode_ids, i] 
                 actor.set_pose(
-                    Pose.create_from_pq(p=xyz, q=self.quat_configs[quat_episode_ids, i])
+                    Pose.create_from_pq(p=xyz, q=quat)
                 )
             if self.gpu_sim_enabled:
                 self.scene._gpu_apply_all()
@@ -415,7 +420,7 @@ class BaseBridgeEnv(BaseDigitalTwinEnv):
                     self.scene._gpu_fetch_all()
             # measured values for bridge dataset
             if self.scene_setting == "flat_table" or self.scene_setting == "sep_flat_table":
-                if self.robot == "widowx250s":
+                if self.robot_uids == "widowx250s_bridgedataset_flat_table" :
                     base_pose = sapien.Pose([0.147, 0.028, 0.870], q=[0, 0, 0, 1])
                     qpos = np.array(
                         [
@@ -429,7 +434,26 @@ class BaseBridgeEnv(BaseDigitalTwinEnv):
                             0.037,
                         ]
                     )
-                elif self.robot == "panda_robotiq":
+                elif self.robot_uids == "panda_robotiq_bridgedataset_flat_table":
+                    base_pose = sapien.Pose([0.25, 0.028, 0.870], q=[0, 0, 0, 1])
+                    qpos = np.array(
+                        [
+                            0.0,
+                            np.pi / 8,
+                            0,
+                            -np.pi * 5 / 8,
+                            0,
+                            np.pi * 3 / 4,
+                            0,
+                            0.04,
+                            0.04,
+                            -0.04,
+                            0.04,
+                            0.04,
+                            -0.04,
+                        ]
+                    )
+                elif self.robot_uids == "panda_bridgedataset_flat_table":
                     base_pose = sapien.Pose([0.25, 0.028, 0.870], q=[0, 0, 0, 1])
                     qpos = np.array(
                         [
@@ -442,12 +466,9 @@ class BaseBridgeEnv(BaseDigitalTwinEnv):
                             np.pi / 4,
                             0.04,
                             0.04,
-                            -0.04,
-                            0.04,
-                            0.04,
-                            -0.04,
                         ]
                     )
+
                 else:
                     raise NotImplementedError()
 
@@ -503,16 +524,22 @@ class BaseBridgeEnv(BaseDigitalTwinEnv):
             """target object bbox size (3, )"""
 
             # stats to track
-            self.consecutive_grasp = torch.zeros((b,), dtype=torch.int32)
-            self.episode_stats = dict(
-                # all_obj_keep_height=torch.zeros((b,), dtype=torch.bool),
-                # moved_correct_obj=torch.zeros((b,), dtype=torch.bool),
-                # moved_wrong_obj=torch.zeros((b,), dtype=torch.bool),
-                # near_tgt_obj=torch.zeros((b,), dtype=torch.bool),
-                is_src_obj_grasped=torch.zeros((b,), dtype=torch.bool),
-                # is_closest_to_tgt=torch.zeros((b,), dtype=torch.bool),
-                consecutive_grasp=torch.zeros((b,), dtype=torch.bool),
-            )
+            # if b == self.num_envs:
+            #     self.consecutive_grasp = torch.zeros((b,), dtype=torch.int32)
+            #     self.episode_stats = dict(
+            #         # all_obj_keep_height=torch.zeros((b,), dtype=torch.bool),
+            #         # moved_correct_obj=torch.zeros((b,), dtype=torch.bool),
+            #         # moved_wrong_obj=torch.zeros((b,), dtype=torch.bool),
+            #         # near_tgt_obj=torch.zeros((b,), dtype=torch.bool),
+            #         is_src_obj_grasped=torch.zeros((b,), dtype=torch.bool),
+            #         # is_closest_to_tgt=torch.zeros((b,), dtype=torch.bool),
+            #         consecutive_grasp=torch.zeros((b,), dtype=torch.bool),
+            #     )
+            # else:
+            #     print(env_idx)
+            #     self.consecutive_grasp[env_idx] = torch.zeros((b,), dtype=torch.int32)
+            #     self.episode_stats["is_src_obj_grasped"][env_idx] = torch.zeros((b,), dtype=torch.bool)
+            #     self.episode_stats["consecutive_grasp"][env_idx] = torch.zeros((b,), dtype=torch.bool)
 
     def _settle(self, t: float = 0.5):
         """run the simulation for some steps to help settle the objects"""
@@ -532,21 +559,21 @@ class BaseBridgeEnv(BaseDigitalTwinEnv):
         target_obj_pose = target_object.pose
 
         # whether moved the correct object
-        source_obj_xy_move_dist = torch.linalg.norm(
-            self.episode_source_obj_xyz_after_settle[:, :2] - source_obj_pose.p[:, :2],
-            dim=1,
-        )
-        other_obj_xy_move_dist = []
-        for obj_name in self.objs.keys():
-            obj = self.objs[obj_name]
-            obj_xyz_after_settle = self.episode_obj_xyzs_after_settle[obj_name]
-            if obj.name == self.source_obj_name:
-                continue
-            other_obj_xy_move_dist.append(
-                torch.linalg.norm(
-                    obj_xyz_after_settle[:, :2] - obj.pose.p[:, :2], dim=1
-                )
-            )
+        # source_obj_xy_move_dist = torch.linalg.norm(
+        #     self.episode_source_obj_xyz_after_settle[:, :2] - source_obj_pose.p[:, :2],
+        #     dim=1,
+        # )
+        # other_obj_xy_move_dist = []
+        # for obj_name in self.objs.keys():
+        #     obj = self.objs[obj_name]
+        #     obj_xyz_after_settle = self.episode_obj_xyzs_after_settle[obj_name]
+        #     if obj.name == self.source_obj_name:
+        #         continue
+        #     other_obj_xy_move_dist.append(
+        #         torch.linalg.norm(
+        #             obj_xyz_after_settle[:, :2] - obj.pose.p[:, :2], dim=1
+        #         )
+        #     )
         # moved_correct_obj = (source_obj_xy_move_dist > 0.03) and (
         #     all([x < source_obj_xy_move_dist for x in other_obj_xy_move_dist])
         # )
@@ -558,10 +585,11 @@ class BaseBridgeEnv(BaseDigitalTwinEnv):
 
         # whether the source object is grasped
         is_src_obj_grasped = self.agent.is_grasping(source_object)
+        # print(is_src_obj_grasped)
         # if is_src_obj_grasped:
-        self.consecutive_grasp += is_src_obj_grasped
-        self.consecutive_grasp[is_src_obj_grasped == 0] = 0
-        consecutive_grasp = self.consecutive_grasp >= 5
+        # self.consecutive_grasp += is_src_obj_grasped
+        # self.consecutive_grasp[is_src_obj_grasped == 0] = 0
+        # consecutive_grasp = self.consecutive_grasp >= 5
 
         # whether the source object is on the target object based on bounding box position
         tgt_obj_half_length_bbox = (
@@ -595,11 +623,13 @@ class BaseBridgeEnv(BaseDigitalTwinEnv):
 
         # self.episode_stats["moved_correct_obj"] = moved_correct_obj
         # self.episode_stats["moved_wrong_obj"] = moved_wrong_obj
-        self.episode_stats["src_on_target"] = src_on_target
-        self.episode_stats["is_src_obj_grasped"] = is_src_obj_grasped
-        self.episode_stats["consecutive_grasp"] = consecutive_grasp
+        # self.episode_stats["src_on_target"] = src_on_target
+        # self.episode_stats["is_src_obj_grasped"] = is_src_obj_grasped
+        # self.episode_stats["consecutive_grasp"] = consecutive_grasp
 
-        return dict(**self.episode_stats, success=success)
+        return dict(src_on_target = src_on_target, 
+                    is_src_obj_grasped=is_src_obj_grasped, 
+                    success=success)
 
     def is_final_subtask(self):
         # whether the current subtask is the final one, only meaningful for long-horizon tasks

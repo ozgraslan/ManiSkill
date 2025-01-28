@@ -319,10 +319,10 @@ class PandaRobotiq(BaseAgent):
             self.robot.get_links(), "right_inner_finger"
         )
         self.finger1pad_link = sapien_utils.get_obj_by_name(
-            self.robot.get_links(), "right_inner_finger_pad"
+            self.robot.get_links(), "left_inner_finger_pad"
         )
         self.finger2pad_link = sapien_utils.get_obj_by_name(
-            self.robot.get_links(), "left_inner_finger_pad"
+            self.robot.get_links(), "right_inner_finger_pad"
         )
         self.tcp = sapien_utils.get_obj_by_name(
             self.robot.get_links(), self.ee_link_name
@@ -347,7 +347,6 @@ class PandaRobotiq(BaseAgent):
 
         # direction to open the gripper
         ldirection = self.finger2pad_link.pose.to_transformation_matrix()[..., :3, 1]
-        ## removed - here and it works now?
         rdirection = self.finger1pad_link.pose.to_transformation_matrix()[..., :3, 1]
         langle = common.compute_angle_between(ldirection, l_contact_forces)
         rangle = common.compute_angle_between(rdirection, r_contact_forces)
@@ -376,7 +375,8 @@ class PandaRobotiq(BaseAgent):
         )
 
     def is_static(self, threshold: float = 0.2):
-        qvel = self.robot.get_qvel()[..., :-1]
+        ## this should only include robot joint vels not the gripper 
+        qvel = self.robot.get_qvel()[..., :-6]
         return torch.max(torch.abs(qvel), 1)[0] <= threshold
 
     @staticmethod
@@ -394,7 +394,7 @@ class PandaRobotiq(BaseAgent):
 
 # Tuned for the sink setup
 @register_agent()
-class PandaRobotiqridgeDatasetFlatTable(PandaRobotiq):
+class PandaRobotiqBridgeDatasetFlatTable(PandaRobotiq):
     uid = "panda_robotiq_bridgedataset_flat_table"
 
     @property
