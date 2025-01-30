@@ -16,6 +16,8 @@ import tyro
 
 from mani_skill.envs.sapien_env import BaseEnv
 from mani_skill.utils.io_utils import load_json
+from mani_skill.utils.gym_utils import inv_scale_action
+
 from torch.utils.data import DataLoader, Dataset
 from torch.utils.data.sampler import BatchSampler, RandomSampler
 from torch.utils.tensorboard.writer import SummaryWriter
@@ -80,6 +82,7 @@ class Args:
 
     # additional tags/configs for logging purposes to wandb and shared comparisons with other algorithms
     demo_type: Optional[str] = None
+    shader: str = "default"
 
     mask_background: bool = False
 
@@ -186,26 +189,34 @@ class ManiSkillDataset(Dataset):
 
             # we use :-1 here to ignore the last observation as that
             # is the terminal observation which has no actions
-            rgb_images = trajectory["obs"]["sensor_data"]["3rd_view_camera"]["rgb"][:-1]
-            print(rgb_images.dtype)
-            # rgb_images = np.float32(rgb_images)
-            self.rgb.append(rgb_images)
-            # delta_actions = []
-            # last_action = trajectory["actions"][0]
-            # for action in trajectory["actions"][1:]:
-            #     delta_actions.append(action - last_action)
-            #     last_action = action
-            # # print(last_action.shape)
-            # # exit(0)
-            # delta_actions = np.vstack(delta_actions)
-            # self.actions.append(delta_actions)
-            self.actions.append(trajectory["actions"])
+            rgb_images = trajectory["obs"]["sensor_data"]["base_camera"]["rgb"][:-1]
+
+            # import matplotlib.pyplot as plt
+
+            # plt.imshow(rgb_images[0])
+            # plt.show()
+
+            # exit(0)
+
+            if args.control_mode == "pd_joint_delta_pos":
+                self.rgb.append(rgb_images[1:])
+
+                # delta_arm_pos = trajectory["obs"]["agent"]["qpos"][1:, :7] - trajectory["obs"]["agent"]["qpos"][:-1, :7]
+                # delta_arm_pos = inv_scale_action(delta_arm_pos, arm_controller.config.lower, arm_controller.config.upper)
+                delta_arm_pos = inv_scale_action(trajectory["actions"][1:, :7]- trajectory["actions"][:-1, :7], arm_controller.config.lower, arm_controller.config.upper)
+                actions = np.concatenate([delta_arm_pos, trajectory["actions"][1:,-2:-1]], axis=-1)
+            else:
+                self.rgb.append(rgb_images)
+
+                actions = trajectory["actions"]
+
+            self.actions.append(actions)
             # import pdb; pdb.set_trace()
             # print()
 
             # print(rgb_images.dtype)
             if self.mask_background:
-                segment_images = np.uint8(trajectory["obs"]["sensor_data"]["3rd_view_camera"]["segmentation"][:-1])
+                segment_images = np.int16(trajectory["obs"]["sensor_data"]["base_camera"]["segmentation"][:-1])
                 mask = np.ones_like(segment_images)
                 mask[
                     np.isin(
@@ -381,21 +392,21 @@ if __name__ == "__main__":
     else:
         run_name = args.exp_name
 
-    if args.demo_path.endswith(".h5"):
-        import json
+    # if args.demo_path.endswith(".h5"):
+    #     import json
 
-        json_file = args.demo_path[:-2] + "json"
-        with open(json_file, "r") as f:
-            demo_info = json.load(f)
-            if "control_mode" in demo_info["env_info"]["env_kwargs"]:
-                control_mode = demo_info["env_info"]["env_kwargs"]["control_mode"]
-            elif "control_mode" in demo_info["episodes"][0]:
-                control_mode = demo_info["episodes"][0]["control_mode"]
-            else:
-                raise Exception("Control mode not found in json")
-            assert (
-                control_mode == args.control_mode
-            ), f"Control mode mismatched. Dataset has control mode {control_mode}, but args has control mode {args.control_mode}"
+    #     json_file = args.demo_path[:-2] + "json"
+    #     with open(json_file, "r") as f:
+    #         demo_info = json.load(f)
+    #         if "control_mode" in demo_info["env_info"]["env_kwargs"]:
+    #             control_mode = demo_info["env_info"]["env_kwargs"]["control_mode"]
+    #         elif "control_mode" in demo_info["episodes"][0]:
+    #             control_mode = demo_info["episodes"][0]["control_mode"]
+    #         else:
+    #             raise Exception("Control mode not found in json")
+    #         assert (
+    #             control_mode == args.control_mode
+    #         ), f"Control mode mismatched. Dataset has control mode {control_mode}, but args has control mode {args.control_mode}"
 
     np.random.seed(args.seed)
     random.seed(args.seed)
@@ -409,14 +420,29 @@ if __name__ == "__main__":
     obs_mode="rgb+segmentation",
     reward_mode="dense",
     control_mode=args.control_mode,
-
     render_mode="rgb_array",
+    sensor_configs=dict(shader_pack=args.shader),
+    human_render_camera_configs=dict(shader_pack=args.shader),
+    viewer_camera_configs=dict(shader_pack=args.shader),
     num_envs=1, # if num_envs > 1, GPU simulation backend is used.
     )
+    arm_controller = env.agent.controller.controllers["arm"]        
     obs, _ = env.reset()
     env = env.unwrapped
-    not_maked_ids = torch.cat([env.robot_link_ids, env.target_object_actor_ids, 
-                               torch.tensor([env.scene.actors["sep_flat_table"]._objs[0].per_scene_id], device=env.device)])
+
+    robot_link_ids = [x._objs[0].entity.per_scene_id for x in env.agent.robot.get_links()]
+
+    actor_ids = [
+        x._objs[0].per_scene_id
+        for x in env.scene.actors.values()
+        if x.name not in ["ground"] ## This is environment spesific
+    ]
+
+    object_ids = torch.tensor(
+                robot_link_ids + actor_ids,
+                dtype=torch.int16,
+                device=env.device,
+            )
 
     print("Backgroud masking:", args.mask_background)
     ds = ManiSkillDataset(
@@ -424,7 +450,7 @@ if __name__ == "__main__":
         device=device,
         load_count=args.num_demos,
         mask_background=args.mask_background,
-        not_masked_ids=not_maked_ids,
+        not_masked_ids=object_ids,
         normalize=args.normalize,
     )
     # exit(0)

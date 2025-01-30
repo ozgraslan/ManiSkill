@@ -229,24 +229,24 @@ class PandaRobotiq(BaseAgent):
             friction=self.gripper_friction,
             normalize_action=False,
         )
-        gripper_pd_joint_delta_pos = PDJointPosMimicControllerConfig(
-            joint_names=finger_joint_names,
-            lower=-0.1,
-            upper=0.1,
-            stiffness=self.gripper_stiffness,
-            damping=self.gripper_damping,
-            force_limit=self.gripper_force_limit,
-            normalize_action=True,
-            friction=self.gripper_friction,
-            use_delta=True,
-        )
+        # gripper_pd_joint_delta_pos = PDJointPosMimicControllerConfig(
+        #     joint_names=finger_joint_names,
+        #     lower=-0.1,
+        #     upper=0.1,
+        #     stiffness=self.gripper_stiffness,
+        #     damping=self.gripper_damping,
+        #     force_limit=self.gripper_force_limit,
+        #     normalize_action=True,
+        #     friction=self.gripper_friction,
+        #     use_delta=True,
+        # )
 
         controller_configs = dict(
             arm_pd_ee_target_delta_pose_align2_gripper_pd_joint_pos=dict(
                 arm=arm_pd_ee_target_delta_pose_align2, gripper=gripper_pd_joint_pos
             ),
             pd_joint_delta_pos=dict(
-                arm=arm_pd_joint_delta_pos, gripper=gripper_pd_joint_delta_pos
+                arm=arm_pd_joint_delta_pos, gripper=gripper_pd_joint_pos
             ),
             pd_joint_pos=dict(arm=arm_pd_joint_pos, gripper=gripper_pd_joint_pos),
             pd_ee_delta_pos=dict(arm=arm_pd_ee_delta_pos, gripper=gripper_pd_joint_pos),

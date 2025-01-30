@@ -15,7 +15,7 @@ import torch.optim as optim
 import tyro
 from mani_skill.utils import gym_utils
 from mani_skill.utils.io_utils import load_json
-from mani_skill.utils.wrappers.obs import MaskResizeRGBSegObsWrapper, ResizeRGBSegObservationWrapper
+from mani_skill.utils.wrappers.obs import MaskResizeRGBSegObsWrapper
 from torch.utils.data import DataLoader, Dataset
 from torch.utils.data.sampler import BatchSampler, RandomSampler
 from torch.utils.tensorboard.writer import SummaryWriter
@@ -70,6 +70,7 @@ class Args:
 
     mask_background: bool = False
     checkpoint: int = 9999
+    shader: str = "default"
 
 def load_h5_data(data):
     out = dict()
@@ -270,26 +271,33 @@ if __name__ == "__main__":
 
     # env setup
     env_kwargs = dict(
+        robot_uids="panda_robotiq",
         control_mode=args.control_mode,
         reward_mode="dense",
         obs_mode="rgb+segmentation",
         render_mode="rgb_array",
+        sensor_configs=dict(shader_pack=args.shader),
+        human_render_camera_configs=dict(shader_pack=args.shader),
+        viewer_camera_configs=dict(shader_pack=args.shader),
+
+
     )
     if args.max_episode_steps is not None:
         env_kwargs["max_episode_steps"] = args.max_episode_steps
 
 
-    def func(wrpr, new_size, normalize):
+    def func(wrpr, masked_obj_list, new_size, normalize):
         def apply(env):
-            return wrpr(env, new_size=new_size, normalize=normalize)
+            return wrpr(env, masked_obj_list=masked_obj_list, new_size=new_size, normalize=normalize)
         return apply
 
 
     ds = torch.load(f"runs/{run_name}/dataset.pt")
     print(ds["actions_mean"].shape) # ds["states_mean"].shape,
 
-    wrapper = MaskResizeRGBSegObsWrapper if args.mask_background else ResizeRGBSegObservationWrapper
-    wrapper = func(wrapper, new_size=(args.new_size, args.new_size), normalize=args.normalize)
+    print("Masking:", args.mask_background)
+    masked_obj_list = ["ground"] if args.mask_background else None
+    wrapper = func(MaskResizeRGBSegObsWrapper, masked_obj_list, (args.new_size, args.new_size), args.normalize)
     envs = make_eval_envs(
         args.env_id,
         args.num_eval_envs,
@@ -316,10 +324,10 @@ if __name__ == "__main__":
     # norm_tensor = torch.Tensor([255.0, 255.0, 255.0]).float().to(device)
 
     def sample_fn(obs):
-        rgb = obs["sensor_data"]["3rd_view_camera"]["rgb"]
+        rgb = obs["sensor_data"]["base_camera"]["rgb"]
         if isinstance(rgb, np.ndarray):
-            rgb = torch.from_numpy(rgb).float().to(device)
-        action_norm = actor(rgb) # , state_norm
+            rgb = torch.from_numpy(rgb).to(device)
+        action_norm = actor(rgb.float()) # , state_norm
         action_denorm = action_norm * action_std + action_mean
         if args.sim_backend == "cpu":
             action_denorm = action_denorm.cpu().numpy()

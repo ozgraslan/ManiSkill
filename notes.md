@@ -16,10 +16,20 @@ python examples/baselines/bc/bc_rgb.py --env_id PutCarrotOnPlateInSceneSep-v1 --
 
 ```
 
+```
+python examples/baselines/bc/bc_rgb.py --env_id PickCube-v1 --demo_path demos/PickCube-v1/motionplanning/render_cam.h5 --num_demos 1024 --total_iters 100002 --control_mode pd_joint_pos --batch_size 64 --sim_backend gpu --track --save_freq 1000 --normalize
+
+```
+
 To run rgb based evaluation:
 
 ```
 python examples/baselines/bc/bc_rgb_eval.py --env_id PutCarrotOnPlateInSceneSep-v1 --demo_path demos/PutCarrotOnPlateInSceneSep-v1/motionplanning/20250104_184007.h5 --exp_name PutCarrotOnPlateInSceneSep-v1__bc_rgb__1__1736458513 --control_mode pd_joint_pos --num_eval_envs 1 --sim_backend gpu --num_eval_episodes 10 --checkpoint 9999 --control_mode pd_joint_pos
+
+```
+
+```
+python examples/baselines/bc/bc_rgb_eval.py --env_id PickCube-v1 --demo_path demos/PickCube-v1/motionplanning/render_cam.h5 --exp_name PickCube-v1__bc_rgb__1__1738262532 --control_mode pd_joint_pos --num_eval_envs 1 --sim_backend gpu --num_eval_episodes 10 --checkpoint 9999 --normalize --max_episode_steps 200
 
 ```
 
